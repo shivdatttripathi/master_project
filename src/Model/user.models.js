@@ -83,11 +83,11 @@ const userSchema = new mongoose.Schema(
       trim: true,
     },
 
-    // Token expiry time (e.g., 1 hour from generation)
-    emailVerificationTokenExpiry: {
-      type: Date,
-      required: false,
-    },
+    // // Token expiry time (e.g., 1 hour from generation)
+    // emailVerificationTokenExpiry: {
+    //   type: Date,
+    //   required: false,
+    // },
 
     // Token sent to email for resetting password
     forgotPasswordToken: {
@@ -115,5 +115,50 @@ const userSchema = new mongoose.Schema(
   }
 );
 
+mongoose.pre("save", async function () {
+  // Hash the password before saving the user document
+  if (this.isModified("password")) {
+    this.password = await bcrypt.hash(this.password, 10); // Hashing with bcrypt
+  }
+  next(); // Proceed to save the document
+});
+userSchema.methods.comparePassword = async function (password) {
+  // Compare the provided password with the hashed password in the database
+  return await bcrypt.compare(password, this.password);
+};
+
+userSchema.methods.generateAccessToken = function () {
+  return jwt.sign(
+    {
+      _id: this._id,
+      email: this.email,
+      username: this.username,
+    },
+    process.env.ACCESS_TOKEN_SECRET,
+    { expiresIn: process.env.ACCESS_TOKEN_EXPIRATION }
+  );
+};
+userSchema.methods.generateRefreshToken = function () {
+  return jwt.sign(
+    {
+      _id: this._id,
+    },
+    process.env.ACCESS_TOKEN_SECRET, // Use the same secret for refresh token
+    { expiresIn: process.env.REFRESH_TOKEN_EXPIRATION }
+  );
+};
+//email token crypto
+userSchema.methods.generateEmailVerificationToken = function () {
+  const unHashed = crypto.randomBytes(20).toString("hex"); // Generate a random token for email verification
+  const hashedToken = crypto
+    .createHash("sha256")
+    .update(unHashed)
+    .digest("hex"); // Hash the token for storage
+  const expires = Date.now() + 30 * 60 * 1000; // Set expiration time (e.g., 30 minutes from now)
+  return { hashedToken, unHashed, expires }; // Return both hashed and unhashed tokens along with expiration time
+};
+
+
+userSchema.methods.generateForgotPasswordToken = function () {
 // Export the User model for use in other parts of the app
 export const User = mongoose.model("User", userSchema);
