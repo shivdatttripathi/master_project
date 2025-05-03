@@ -1,20 +1,22 @@
 import mongoose from "mongoose";
+import bcrypt from "bcrypt"; // For hashing passwords
+import jwt from "jsonwebtoken"; // For generating JWT tokens
+import crypto from "crypto"; // For generating secure random tokens
 
 // Define the schema for the User collection in MongoDB
 const userSchema = new mongoose.Schema(
   {
     // Avatar object to store profile image URL and its local path
     avatar: {
-      type: {
-        url: String, // URL of the user's avatar image
-        localPath: String, // Local path (if stored on server)
-        required: false, // Optional field
-        trim: true, // Trims whitespace
+      url: {
+        type: String,
+        trim: true,
+        default: "https://placehold.co/600x400",
       },
-      // Default avatar image if user doesn't upload one
-      default: {
-        url: "https://placehold.co/600x400",
-        localPath: "",
+      localPath: {
+        type: String,
+        trim: true,
+        default: "",
       },
     },
 
@@ -52,14 +54,12 @@ const userSchema = new mongoose.Schema(
     // Optional phone number of the user
     phone: {
       type: String,
-      required: false,
       trim: true,
     },
 
     // Optional address field
     address: {
       type: String,
-      required: false,
       trim: true,
     },
 
@@ -71,7 +71,7 @@ const userSchema = new mongoose.Schema(
     },
 
     // Whether the user's email is verified
-    isVerified: {
+    isEmailVerified: {
       type: Boolean,
       default: false,
     },
@@ -79,33 +79,28 @@ const userSchema = new mongoose.Schema(
     // Token sent to user email for verification
     emailVerificationToken: {
       type: String,
-      required: false,
       trim: true,
     },
 
-    // // Token expiry time (e.g., 1 hour from generation)
-    // emailVerificationTokenExpiry: {
-    //   type: Date,
-    //   required: false,
-    // },
+    // Token expiry time for email verification
+    emailVerificationExpiry: {
+      type: Date,
+    },
 
     // Token sent to email for resetting password
     forgotPasswordToken: {
       type: String,
-      required: false,
       trim: true,
     },
 
     // Expiry for the forgot password token
-    forgotPasswordTokenExpiry: {
+    forgotPasswordExpiry: {
       type: Date,
-      required: false,
     },
 
     // Refresh token for maintaining login session
     refreshToken: {
       type: String,
-      required: false,
       trim: true,
     },
   },
@@ -115,18 +110,19 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-mongoose.pre("save", async function () {
-  // Hash the password before saving the user document
-  if (this.isModified("password")) {
-    this.password = await bcrypt.hash(this.password, 10); // Hashing with bcrypt
-  }
-  next(); // Proceed to save the document
+// Hash password before saving
+userSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) return next();
+  this.password = await bcrypt.hash(this.password, 10);
+  next();
 });
-userSchema.methods.comparePassword = async function (password) {
-  // Compare the provided password with the hashed password in the database
+
+// Method to compare passwords
+userSchema.methods.isPasswordCorrect = async function (password) {
   return await bcrypt.compare(password, this.password);
 };
 
+// Method to generate access token
 userSchema.methods.generateAccessToken = function () {
   return jwt.sign(
     {
@@ -135,30 +131,34 @@ userSchema.methods.generateAccessToken = function () {
       username: this.username,
     },
     process.env.ACCESS_TOKEN_SECRET,
-    { expiresIn: process.env.ACCESS_TOKEN_EXPIRATION }
+    { expiresIn: process.env.ACCESS_TOKEN_EXPIRY }
   );
 };
+
+// Method to generate refresh token
 userSchema.methods.generateRefreshToken = function () {
   return jwt.sign(
     {
       _id: this._id,
     },
-    process.env.ACCESS_TOKEN_SECRET, // Use the same secret for refresh token
-    { expiresIn: process.env.REFRESH_TOKEN_EXPIRATION }
+    process.env.REFRESH_TOKEN_SECRET,
+    { expiresIn: process.env.REFRESH_TOKEN_EXPIRY }
   );
 };
-//email token crypto
-userSchema.methods.generateEmailVerificationToken = function () {
-  const unHashed = crypto.randomBytes(20).toString("hex"); // Generate a random token for email verification
+
+// Method to generate temporary token (e.g., for email verification or password reset)
+userSchema.methods.generateTemporaryToken = function () {
+  const unHashedToken = crypto.randomBytes(20).toString("hex");
   const hashedToken = crypto
     .createHash("sha256")
-    .update(unHashed)
-    .digest("hex"); // Hash the token for storage
-  const expires = Date.now() + 30 * 60 * 1000; // Set expiration time (e.g., 30 minutes from now)
-  return { hashedToken, unHashed, expires }; // Return both hashed and unhashed tokens along with expiration time
+    .update(unHashedToken)
+    .digest("hex");
+  const tokenExpiry = Date.now() + 20 * 60 * 1000; // 20 minutes
+  this.emailVerificationToken = hashedToken;
+  this.emailVerificationExpiry = tokenExpiry;
+
+  return { hashedToken, unHashedToken, tokenExpiry };
 };
 
-
-userSchema.methods.generateForgotPasswordToken = function () {
 // Export the User model for use in other parts of the app
 export const User = mongoose.model("User", userSchema);

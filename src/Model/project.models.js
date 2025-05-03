@@ -24,7 +24,14 @@ const projectSchema = new mongoose.Schema(
       enum: AvailableUserRoles,
       default: UserRoleEnum.MEMBER,
     },
+
   },
   { timestamps: true }
 );
+
+// Create a compound index to ensure unique name and createdBy combination
+// projectSchema.index({ name: 1, createdBy: 1 }, { unique: true });
+
+
+
 export const Project = mongoose.model("Project", projectSchema);
