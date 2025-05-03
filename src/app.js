@@ -1,11 +1,11 @@
 import express from "express";
 const app = express();
 import cors from "cors";
-
+import cookieParser from "cookie-parser";
 // Config CORS properly
 app.use(
   cors({
-    origin: "*",
+    origin: "http://localhost:4000",
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
@@ -16,6 +16,9 @@ app.use(express.json());
 
 // URL-encoded middleware
 app.use(express.urlencoded({ extended: true }));
+
+// Cookie parser middleware
+app.use(cookieParser());
 
 // Import routes
 import healthcheckRouter from "./Routes/healthchecks.routes.js";
