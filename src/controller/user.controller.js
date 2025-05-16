@@ -202,12 +202,7 @@ const forgotPassword = asyncHandler(async (req, res) => {
   user.passwordResetExpiry = tokenExpiry;
   await user.save({ validateBeforeSave: false });
   //send email
-  await forgotPasswordSendEmail(
-    unHashedToken,
-    user.fullname,
-    user.email,
-    "resetPassword"
-  );
+  await forgotPasswordSendEmail(unHashedToken, user.fullname, user.email);
 
   const response = new ApiResponse(200, null, "Password reset email sent");
   return res.status(response.statusCode).json(response);
